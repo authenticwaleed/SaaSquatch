@@ -34,7 +34,11 @@ export const PRIORITY_BLEND = { fit: 0.6, upside: 0.4 } as const;
 export const FIT_FLOOR = 35;
 export const FIT_FLOOR_ALLOWANCE = 10;
 
-export const BAND_THRESHOLDS = { A: 75, B: 60, C: 45 } as const;
+/**
+ * Band A is meant to be a shortlist a searcher can actually work this week. Set
+ * too low it stops being triage — if most of the list is "call now", nothing is.
+ */
+export const BAND_THRESHOLDS = { A: 82, B: 68, C: 52 } as const;
 
 /** Copyright this many years stale counts as a neglected site. */
 export const STALE_SITE_YEARS = 3;
