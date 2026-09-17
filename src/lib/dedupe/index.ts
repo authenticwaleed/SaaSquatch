@@ -128,10 +128,25 @@ export function matchLeads(a: Lead, b: Lead): MatchReason | null {
   return null;
 }
 
+const LEGAL_SUFFIX = /\b(inc|llc|ltd|limited|corp|corporation|co|plc|pllc|pc|lp|llp)\b\.?/i;
+
+/**
+ * The most complete row is the best *record*, but not always the best *name* —
+ * it is often the formal registry entry ("Brennan Heating and Air, Inc."). Prefer
+ * a variant without legal-suffix noise for display, falling back to the primary.
+ */
+function pickDisplayName(members: Lead[]): string {
+  const clean = members
+    .map((m) => m.companyName.trim())
+    .filter((n) => n && !LEGAL_SUFFIX.test(n))
+    .sort((a, b) => b.length - a.length);
+  return clean[0] ?? members[0].companyName;
+}
+
 /** Field-by-field merge: the most complete record wins, gaps fill from the rest. */
 export function mergeCluster(members: Lead[]): Lead {
   const ordered = [...members].sort((x, y) => completeness(y) - completeness(x));
-  const merged = { ...ordered[0] };
+  const merged = { ...ordered[0], companyName: pickDisplayName(ordered) };
 
   for (const candidate of ordered.slice(1)) {
     for (const key of Object.keys(merged) as Array<keyof Lead>) {

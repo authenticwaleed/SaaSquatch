@@ -147,10 +147,23 @@ describe("scoreUpside", () => {
 });
 
 describe("scoreLead", () => {
-  it("ranks a strong-fit, low-maturity business in band A", () => {
-    const s = scoreLead(lead(), signals({ hasOnlineBooking: false, mobileResponsive: false, cms: null }), NOW);
+  it("ranks a strong-fit, genuinely neglected business in band A", () => {
+    const s = scoreLead(
+      lead(),
+      signals({
+        hasOnlineBooking: false, mobileResponsive: false, cms: null,
+        https: false, hasAnalytics: false, copyrightYear: 2015,
+      }),
+      NOW,
+    );
     expect(s.band).toBe("A");
-    expect(s.priority).toBeGreaterThanOrEqual(75);
+    expect(s.priority).toBeGreaterThanOrEqual(82);
+  });
+
+  it("keeps a strong target with only a few gaps out of the top band", () => {
+    // Band A is a shortlist. Good-but-not-urgent belongs in B.
+    const s = scoreLead(lead(), signals({ hasOnlineBooking: false, mobileResponsive: false, cms: null }), NOW);
+    expect(s.band).toBe("B");
   });
 
   it("gates priority on fit so an unacquirable company cannot float to the top", () => {

@@ -213,6 +213,27 @@ sales@mailinator.com           INVALID  0.00   disposable provider
 
 ---
 
+## The dashboard
+
+One screen, ranked by default. The board answers "who do I call first" without
+the user configuring anything first.
+
+- **Stat tiles** — source rows, companies after dedupe, band-A shortlist, sites enriched
+- **Ranked table** — priority bar, band badge, Fit and Upside side by side, a one-line
+  signal summary per row, and a `×3` badge where rows were merged
+- **Why this score** — click any row for the full per-signal breakdown of both axes,
+  the merge provenance, and the email verdict with its reasoning
+- **Filters** — search, band, industry, sort, and "contactable only"
+- **Export** — CRM-shaped CSV of the *current filtered view*, not the whole list
+
+Confidence is surfaced next to the score, never hidden: a `*` marks a row whose
+Upside is based on partial data, and the drawer explains exactly why.
+
+Bands are deliberately tight. Band A is a shortlist a searcher can work this
+week — if most of the list is "call now", the ranking carries no signal.
+
+---
+
 ## Setup
 
 ```bash
@@ -227,7 +248,7 @@ Everything works with no environment configured: the cache falls back to memory.
 `DATABASE_URL` for persistence and the Upstash pair for a shared cache.
 
 ```bash
-npm test          # 54 unit tests, no network required
+npm test          # 55 unit tests, no network required
 npm run test:watch
 npx tsc --noEmit  # typecheck
 ```
@@ -251,6 +272,8 @@ src/lib/
   validation/
     email.ts            Syntax, role, disposable, company-domain match
     mx.ts               Cached MX lookup
+  pipeline.ts           Dedupe -> score -> validate, into ranked rows
+  csv.ts                CRM-shaped export; tolerant CSV import
   enrichment/
     patterns.ts         Vendor fingerprints
     http.ts             Timeout, byte cap, backoff, declared UA
@@ -258,7 +281,9 @@ src/lib/
     signals.ts          Cheerio extraction
     cache.ts            Upstash Redis with in-memory fallback
     index.ts            Orchestration, concurrency cap
-tests/                  54 tests covering scoring, enrichment and data-quality invariants
+components/             Board (table, filters) and ScoreDrawer
+data/seed.ts            Demo dataset: duplicates, bad emails, a dead domain
+tests/                  55 tests covering scoring, enrichment and data-quality invariants
 ```
 
 ## Status
@@ -267,5 +292,6 @@ tests/                  54 tests covering scoring, enrichment and data-quality i
 - [x] Enrichment scraper: robots, caching, concurrency, graceful failure
 - [x] Deduplication with auditable merge reasons
 - [x] Email validation: syntax, role, disposable, MX
-- [ ] Drizzle schema and persistence
-- [ ] Dashboard, filtering, CRM-shaped export
+- [x] Dashboard: ranked board, filters, score drawer, CRM export
+- [x] CSV import with tolerant header mapping
+- [ ] Drizzle schema and persistence (runs on seed data today)
