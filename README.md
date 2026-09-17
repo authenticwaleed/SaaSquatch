@@ -116,16 +116,40 @@ without touching logic.
 | Framework | **Next.js 15** (App Router), TypeScript | One deployable; server and client in one repo |
 | UI | Tailwind CSS 4, TanStack Table | |
 | API | Route Handlers + Server Actions | No separate service to host |
-| **Database** | **Neon — serverless Postgres**, Drizzle ORM | Scales to zero; HTTP driver works in serverless |
+| **Database** | **Neon — serverless Postgres**, Drizzle ORM | Scales to zero; HTTP driver works in serverless. Optional — see below |
 | **Caching** | **Upstash Redis**, 7-day TTL keyed by normalised domain | See below |
 | Enrichment | `fetch` + Cheerio | See below |
 | **Hosting** | **Vercel — serverless functions**, not static | Enrichment needs a server runtime |
 | **Deployment** | Push to `main` → Vercel builds and deploys | Preview deploy per PR |
 | **Cloud** | Vercel (compute), Neon (data), Upstash (cache) | |
 
+### Persistence
+
+Optional, and the app is fully usable without it. With `DATABASE_URL` set:
+
+- **Scoring runs are snapshotted.** An import or an enrichment pass is written as an immutable
+  run, and the board reopens on the last one instead of resetting to the demo data. Re-scoring
+  after enrichment creates a *new* run rather than mutating the old one, so you can see how a
+  list changed once the sites were actually scanned.
+- **Enrichment gets a durable tier.** Redis stays the hot path; Postgres sits beneath it. A cache
+  eviction or cold deploy no longer means re-fetching every site we already politely scanned once.
+
+Scores, verdicts and signals are stored as `jsonb`; only `priority` and `band` are lifted into
+real columns, because those are what we sort and filter on. The rubric is expected to change, and
+a schema migration per weight change would be the wrong trade.
+
+```bash
+npm run db:generate   # emit SQL from src/db/schema.ts
+npm run db:push       # apply to DATABASE_URL
+npm run seed          # load the demo dataset as a run
+```
+
+Every database call returns null and logs on failure rather than throwing — persistence never
+breaks a scoring run the user is watching.
+
 ### Caching and performance
 
-- **Enrichment cache** keyed by normalised domain, 7-day TTL. Measured on a live run:
+- **Two-tier enrichment cache** keyed by normalised domain: Redis (7-day TTL) over Postgres. Measured on a live run:
   **3,210 ms cold → 0 ms warm** for the same batch.
 - **Concurrency-capped** batch enrichment (`p-limit`, default 5) bounds simultaneous outbound
   connections regardless of batch size, keeping a serverless invocation inside its socket budget.
@@ -307,7 +331,7 @@ in-memory cache. Add these to upgrade it:
 | Variable | Effect if absent |
 |---|---|
 | `UPSTASH_REDIS_REST_URL` / `_TOKEN` | Cache falls back to an in-process Map |
-| `DATABASE_URL` (Neon) | No persistence; state is per-request |
+| `DATABASE_URL` (Neon) | No run history; enrichment cache loses its durable tier |
 | `OPENAI_API_KEY` | Outreach-angle generation is unavailable |
 
 `/api/enrich` sets `maxDuration = 60` and caps a batch at 60 leads, which keeps it
@@ -339,6 +363,9 @@ src/lib/
     mx.ts               Cached MX lookup
   pipeline.ts           Dedupe -> score -> validate, into ranked rows
   csv.ts                CRM-shaped export; tolerant CSV import
+  db/
+    schema.ts           runs, lead_rows, site_signals
+    repository.ts       Save/load runs; durable signal cache. No-ops without a DB
   enrichment/
     patterns.ts         Vendor fingerprints
     http.ts             Timeout, byte cap, backoff, declared UA
@@ -361,4 +388,4 @@ tests/                  57 tests covering scoring, enrichment and data-quality i
 - [x] Email validation: syntax, role, disposable, MX
 - [x] Dashboard: ranked board, filters, score drawer, CRM export
 - [x] CSV import with tolerant header mapping, and on-demand enrichment
-- [ ] Drizzle schema and persistence (runs on seed data today)
+- [x] Drizzle schema, run snapshots and a durable enrichment tier (optional)

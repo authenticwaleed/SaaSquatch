@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { enrichBatch } from "@/lib/enrichment";
 import { runPipeline } from "@/lib/pipeline";
+import { saveRun } from "@/db/repository";
 import type { DigitalSignals, Lead } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -55,7 +56,9 @@ export async function POST(request: Request) {
 
   // Re-run the pipeline so scores, bands and ordering reflect the new signals.
   const { rows, summary } = await runPipeline(leads, signals, { checkMx: false });
+  const runId = await saveRun(rows, summary, "enrich", `Enriched ${leads.length} companies`);
   return NextResponse.json({
+    runId,
     rows,
     summary,
     enrichment: results.map((r) => ({ leadId: r.leadId, status: r.status, note: r.note })),

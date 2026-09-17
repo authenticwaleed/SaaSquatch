@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { fromCsv } from "@/lib/csv";
 import { runPipeline } from "@/lib/pipeline";
+import { saveRun } from "@/db/repository";
 
 export const runtime = "nodejs";
 
@@ -38,5 +39,7 @@ export async function POST(request: Request) {
   }
 
   const { rows, summary } = await runPipeline(leads, {}, { checkMx: false });
-  return NextResponse.json({ rows, summary });
+  // Best-effort: returns null and logs when no database is configured.
+  const runId = await saveRun(rows, summary, "import", `Import of ${leads.length} rows`);
+  return NextResponse.json({ rows, summary, runId });
 }
