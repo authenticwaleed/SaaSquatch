@@ -60,7 +60,15 @@ export function scoreLead(
   const fit = scoreFit(lead, now);
   const upside = scoreUpside(lead, signals, now);
 
-  const blended = PRIORITY_BLEND.fit * fit.score + PRIORITY_BLEND.upside * upside.score;
+  // Upside with zero confidence means we never measured it — not that there is
+  // none. Blending a zero we did not observe would rank an un-enriched lead
+  // below a scanned one purely for not having been looked at yet, so we fall
+  // back to Fit alone and let the UI mark it as pending enrichment.
+  const blended =
+    upside.confidence === 0
+      ? fit.score
+      : PRIORITY_BLEND.fit * fit.score + PRIORITY_BLEND.upside * upside.score;
+
   const priority =
     fit.score < FIT_FLOOR
       ? Math.round(Math.min(blended, fit.score + FIT_FLOOR_ALLOWANCE))

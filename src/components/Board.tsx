@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import type { LeadRow, PipelineSummary } from "@/lib/pipeline";
 import { toCsv } from "@/lib/csv";
 import { ScoreDrawer } from "./ScoreDrawer";
+import { ImportPanel } from "./ImportPanel";
 
 type SortKey = "priority" | "fit" | "upside" | "company";
 type BandFilter = "all" | "A" | "B" | "C" | "D";
@@ -21,7 +22,19 @@ function StatTile({ label, value, hint }: { label: string; value: string | numbe
   );
 }
 
-export function Board({ rows, summary }: { rows: LeadRow[]; summary: PipelineSummary }) {
+export function Board({
+  rows: initialRows,
+  summary: initialSummary,
+}: {
+  rows: LeadRow[];
+  summary: PipelineSummary;
+}) {
+  const [rows, setRows] = useState(initialRows);
+  const [summary, setSummary] = useState(initialSummary);
+  const [source, setSource] = useState<"demo" | "import">("demo");
+  const [importOpen, setImportOpen] = useState(false);
+  const [enriching, setEnriching] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [band, setBand] = useState<BandFilter>("all");
   const [industry, setIndustry] = useState("all");
@@ -54,6 +67,46 @@ export function Board({ rows, summary }: { rows: LeadRow[]; summary: PipelineSum
     });
   }, [rows, query, band, industry, contactable, sort]);
 
+  const unenriched = rows.filter((r) => r.signals == null).length;
+
+  /**
+   * Scan the imported companies' websites and re-score. Bounded server-side; we
+   * surface the count rather than a spinner alone so a slow batch is explainable.
+   */
+  async function enrichAll() {
+    setEnriching(true);
+    setNotice(null);
+    try {
+      const res = await fetch("/api/enrich", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ leads: rows.slice(0, 60).map((r) => r.lead) }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setNotice(data.error ?? "Enrichment failed.");
+        return;
+      }
+      setRows(data.rows);
+      setSummary(data.summary);
+      const reached = data.enrichment.filter(
+        (e: { status: string }) => e.status === "fetched" || e.status === "cached",
+      ).length;
+      setNotice(`Scanned ${data.enrichment.length} sites — ${reached} reachable. Scores updated.`);
+    } catch {
+      setNotice("Could not reach the server.");
+    } finally {
+      setEnriching(false);
+    }
+  }
+
+  function resetToDemo() {
+    setRows(initialRows);
+    setSummary(initialSummary);
+    setSource("demo");
+    setNotice(null);
+  }
+
   function exportCsv() {
     const blob = new Blob([toCsv(filtered)], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
@@ -77,13 +130,45 @@ export function Board({ rows, summary }: { rows: LeadRow[]; summary: PipelineSum
             is left to unlock after the deal closes.
           </p>
         </div>
-        <button
-          onClick={exportCsv}
-          className="rounded-md bg-[var(--accent)] px-3.5 py-2 text-[12.5px] font-medium text-white transition hover:opacity-90"
-        >
-          Export {filtered.length} to CRM
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          {source === "import" && (
+            <button
+              onClick={resetToDemo}
+              className="rounded-md border px-3 py-2 text-[12.5px] hover:bg-[var(--surface-2)]"
+            >
+              Back to demo
+            </button>
+          )}
+          {unenriched > 0 && (
+            <button
+              onClick={enrichAll}
+              disabled={enriching}
+              className="rounded-md border px-3 py-2 text-[12.5px] transition hover:bg-[var(--surface-2)] disabled:opacity-50"
+              title="Scan each company's website for digital-maturity signals"
+            >
+              {enriching ? "Scanning sites…" : `Enrich ${Math.min(unenriched, 60)} sites`}
+            </button>
+          )}
+          <button
+            onClick={() => setImportOpen(true)}
+            className="rounded-md border px-3 py-2 text-[12.5px] hover:bg-[var(--surface-2)]"
+          >
+            Import CSV
+          </button>
+          <button
+            onClick={exportCsv}
+            className="rounded-md bg-[var(--accent)] px-3.5 py-2 text-[12.5px] font-medium text-white transition hover:opacity-90"
+          >
+            Export {filtered.length} to CRM
+          </button>
+        </div>
       </header>
+
+      {notice && (
+        <p className="mb-4 rounded-md border bg-[var(--surface)] px-3.5 py-2.5 text-[12px] text-[var(--text-muted)]">
+          {notice}
+        </p>
+      )}
 
       <section className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StatTile label="Source rows" value={summary.inputRows} hint={`${summary.duplicatesRemoved} duplicates merged`} />
@@ -234,6 +319,21 @@ export function Board({ rows, summary }: { rows: LeadRow[]; summary: PipelineSum
       </p>
 
       <ScoreDrawer row={selected} onClose={() => setSelected(null)} />
+      {importOpen && (
+        <ImportPanel
+          onClose={() => setImportOpen(false)}
+          onLoaded={(newRows, newSummary, newSource) => {
+            setRows(newRows);
+            setSummary(newSummary);
+            setSource(newSource);
+            setSelected(null);
+            setNotice(
+              `Imported ${newSummary.inputRows} rows into ${newSummary.companies} companies. ` +
+                `Upside is unscored until you enrich — click "Enrich sites".`,
+            );
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -185,6 +185,25 @@ describe("scoreLead", () => {
   });
 });
 
+describe("unmeasured upside", () => {
+  it("ranks on fit alone rather than blending in a zero it never measured", () => {
+    const unenriched = scoreLead(lead(), null, NOW);
+    expect(unenriched.upside.confidence).toBe(0);
+    // Fit is ~100, so priority must not be dragged down to ~60 by an unobserved zero.
+    expect(unenriched.priority).toBe(unenriched.fit.score);
+    expect(unenriched.band).toBe("A");
+  });
+
+  it("still applies the fit gate to an un-enriched lead", () => {
+    const weak = scoreLead(
+      lead({ revenueUsd: 40_000, employeeCount: 1, yearFounded: 2025, industry: "Crypto", ownerName: null }),
+      null,
+      NOW,
+    );
+    expect(weak.band).toBe("D");
+  });
+});
+
 describe("rankLeads", () => {
   it("orders by priority and breaks ties toward the better fit", () => {
     const ranked = rankLeads(
