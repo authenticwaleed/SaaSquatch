@@ -155,6 +155,64 @@ copy and is ignored; `"Book now"` on a link or button is a booking flow and coun
 
 ---
 
+## Data quality
+
+Scraped exports duplicate constantly. The same company arrives as
+"Brennan Heating & Air", "Brennan Heating and Air, Inc." and a bare domain row.
+Paying twice to contact one prospect is the visible cost; two reps calling the
+same owner in the same week is the worse one.
+
+### Deduplication
+
+Leads are clustered with union-find over four rules, each recording *why* it fired:
+
+| Rule | Confidence | Notes |
+|---|---|---|
+| Same normalised domain | 0.98 | Strongest signal |
+| Same contact email | 0.95 | |
+| Same phone **and** similar name | 0.90 | Phone alone is not enough — franchises and answering services share lines |
+| Near-identical name in same location | 0.85 | Dice coefficient ≥ 0.85 over character bigrams |
+
+Comparison is **blocked** by domain, phone, email and name-prefix, so cost stays
+near-linear instead of quadratic on a large export.
+
+Merging is not deletion. The most complete record survives and its gaps are filled
+from the rest, so a cluster yields a record **more complete than any single source row**:
+
+```
+DEDUPE: 7 rows -> 5 companies (2 removed)
+
+Merged [1, 2, 3] -> "Brennan Heating & Air"
+   domain     (0.98): Same domain (brennanhvac.com)
+   phone+name (0.90): Same phone (4195550100) and similar name (0.78)
+   recovered: owner=Dale Brennan  rev=$3.2M  staff=24
+```
+
+Row 1 had the revenue, row 2 had the owner, row 3 had the headcount. No single
+row had all three.
+
+### Email validation
+
+Syntax, disposable-provider and role-account detection, plus an MX lookup to
+confirm the domain accepts mail at all. Results are cached for 30 days.
+
+We stop at MX on purpose. SMTP probing of individual mailboxes is intrusive,
+widely blocked, and a reliable way to get a sending domain blacklisted.
+
+The grading is tuned for **acquisition outreach specifically**, which differs from
+generic B2B sales: a shared `info@` inbox is often the only published address a
+30-year-old family business has, so it is downgraded to `risky` rather than
+discarded. A named address on the company's own domain rates highest.
+
+```
+dr.vance@toledodental.com      VALID    0.90   matches company domain
+info@brennanhvac.com           RISKY    0.65   shared inbox, not a named decision-maker
+cornerbarbers@gmail.com        RISKY    0.70   consumer mailbox on a business lead
+sales@mailinator.com           INVALID  0.00   disposable provider
+```
+
+---
+
 ## Setup
 
 ```bash
@@ -169,7 +227,7 @@ Everything works with no environment configured: the cache falls back to memory.
 `DATABASE_URL` for persistence and the Upstash pair for a shared cache.
 
 ```bash
-npm test          # 34 unit tests, no network required
+npm test          # 54 unit tests, no network required
 npm run test:watch
 npx tsc --noEmit  # typecheck
 ```
@@ -187,6 +245,12 @@ src/lib/
     fit.ts              Acquisition Fit
     upside.ts           AI-Readiness Upside (inverted)
     index.ts            Blend, Fit gate, banding, headline
+  dedupe/
+    similarity.ts       Dice coefficient over bigrams; phone normalisation
+    index.ts            Blocking, union-find clustering, auditable merge
+  validation/
+    email.ts            Syntax, role, disposable, company-domain match
+    mx.ts               Cached MX lookup
   enrichment/
     patterns.ts         Vendor fingerprints
     http.ts             Timeout, byte cap, backoff, declared UA
@@ -194,13 +258,14 @@ src/lib/
     signals.ts          Cheerio extraction
     cache.ts            Upstash Redis with in-memory fallback
     index.ts            Orchestration, concurrency cap
-tests/                  34 tests covering scoring and enrichment invariants
+tests/                  54 tests covering scoring, enrichment and data-quality invariants
 ```
 
 ## Status
 
 - [x] Scoring engine, explainable, unit-tested
 - [x] Enrichment scraper: robots, caching, concurrency, graceful failure
+- [x] Deduplication with auditable merge reasons
+- [x] Email validation: syntax, role, disposable, MX
 - [ ] Drizzle schema and persistence
-- [ ] Dedupe and email validation
 - [ ] Dashboard, filtering, CRM-shaped export
