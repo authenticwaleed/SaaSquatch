@@ -260,6 +260,41 @@ npm run test:watch
 npx tsc --noEmit  # typecheck
 ```
 
+---
+
+## Deployment
+
+Deployed on Vercel serverless. Both API routes declare `runtime = "nodejs"` —
+enrichment uses `cheerio` and MX validation uses `node:dns`, neither of which
+runs on the edge runtime.
+
+```bash
+npm i -g vercel
+vercel login
+vercel link          # connect this directory to a Vercel project
+vercel --prod        # first deploy
+```
+
+Or connect the GitHub repo in the Vercel dashboard; pushes to `main` then deploy
+automatically and every PR gets a preview URL.
+
+**No environment variables are required.** The app runs on seed data with an
+in-memory cache. Add these to upgrade it:
+
+| Variable | Effect if absent |
+|---|---|
+| `UPSTASH_REDIS_REST_URL` / `_TOKEN` | Cache falls back to an in-process Map |
+| `DATABASE_URL` (Neon) | No persistence; state is per-request |
+| `OPENAI_API_KEY` | Outreach-angle generation is unavailable |
+
+`/api/enrich` sets `maxDuration = 60` and caps a batch at 60 leads, which keeps it
+inside the Vercel function limit on the Hobby plan.
+
+### Verified from a clean clone
+
+`npm ci` → 57 tests → `npm run build` → `npm run start`, in an empty directory
+with no `.env`. If any of that breaks for you, it is a bug, not a setup step.
+
 ## Project layout
 
 ```
