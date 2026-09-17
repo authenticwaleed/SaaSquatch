@@ -336,6 +336,30 @@ npm i -g vercel && vercel login && vercel --prod
 Both API routes declare `runtime = "nodejs"`. `/api/enrich` also sets `maxDuration = 60`, which
 Vercel honours and other hosts ignore.
 
+### Container
+
+```bash
+docker build -t saasquatch-signal .
+docker run -p 3000:3000 saasquatch-signal
+```
+
+Multi-stage build on `node:22-alpine`, running as a non-root user, using Next's
+`standalone` output so the image ships only the modules the build actually traced.
+
+**This is not for Netlify.** Netlify builds in its own image and deploys the API routes as
+serverless functions — it cannot run a container. The image exists for reproducible local runs
+and for hosts that run a real Node process (Render, Fly.io, Koyeb, a VPS), where there is no
+synchronous function timeout and `ENRICH_BATCH_LIMIT` can be raised well above 15.
+
+Standalone output is opt-in via `BUILD_STANDALONE=true`, set only inside the Dockerfile.
+Netlify's Next.js Runtime expects the default output and breaks if it finds a standalone
+build, so a normal `npm run build` is unchanged.
+
+> **Note on `DATABASE_URL` in a container:** the app uses `@neondatabase/serverless`, which
+> speaks Neon's HTTP protocol rather than the Postgres wire protocol. Point it at a Neon
+> database, not a local `postgres` container — a plain Postgres would need the
+> `drizzle-orm/node-postgres` driver instead.
+
 ### Function timeouts and the batch limit
 
 Enrichment is the only endpoint that does real work, and hosts cap synchronous functions

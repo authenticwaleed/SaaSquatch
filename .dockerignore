@@ -1,0 +1,16 @@
+node_modules
+.next
+.git
+.github
+docs
+drizzle
+*.md
+.env
+.env*.local
+coverage
+tests
+.nvmrc
+netlify.toml
+Dockerfile
+.dockerignore
+docker-compose.yml
