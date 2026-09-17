@@ -160,7 +160,6 @@ describe("scoreLead", () => {
       signals({ hasWebsite: false }),
       NOW,
     );
-    expect(weak.score ?? weak.upside.score).toBeGreaterThan(0);
     expect(weak.upside.score).toBe(90);
     expect(weak.priority).toBeLessThan(45);
     expect(weak.band).toBe("D");

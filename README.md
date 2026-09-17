@@ -1,36 +1,206 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# SaaSquatch Signal
 
-## Getting Started
+**SaaSquatch finds companies. Signal tells you which ones to call first — and why.**
 
-First, run the development server:
+An acquisition-readiness scoring layer built on top of [SaaSquatch Leads](https://www.saasquatchleads.com/).
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+---
+
+## The problem
+
+SaaSquatch is good at what it does: it scrapes and enriches company records — email, phone,
+LinkedIn, revenue, industry, headcount, owner. What it returns is a **flat, unranked list**.
+
+A searcher working 300 rows still has to open each one and decide by hand which is worth a call.
+That triage is the actual bottleneck, and it is the part no one has automated.
+
+## The insight
+
+Caprae's users are not a sales team. They are **acquirers**. Caprae's own positioning points at
+the $10 trillion of small and mid-sized businesses changing hands as their owners retire, and the
+firm's stated thesis is that *"the greater value creation is post-acquisition, not at the time of
+acquisition."*
+
+So the right question for each row is not "is this a good lead?" It is two questions:
+
+1. **Acquisition Fit** — is this business realistically buyable?
+2. **AI-Readiness Upside** — how much value could be unlocked *after* the deal closes?
+
+Signal scores both, ranks by the blend, and shows its work.
+
+### The counter-intuitive part
+
+**A low digital-maturity score raises the Upside score.**
+
+A profitable 30-year-old HVAC company still taking every booking by phone is not a bad lead.
+It is the entire thesis. The gap between how that business runs today and how it could run is
+exactly the value a buyer creates post-close.
+
+That inversion produces nonsense on its own — a defunct one-person shop also has no website —
+so **Priority is gated on Fit**. A company that cannot realistically be acquired never outranks
+one that can, however much headroom it shows.
+
+```
+RANK  PRI  FIT  UPS  BAND  COMPANY
+  1    91  100   77   A    Brennan Heating & Air    32-yr HVAC, $3.2M, site untouched since 2015
+  2    77   93   52   A    Valley Precision Machining
+  3    58   96    0   C    Lakeside Dental          great target — but nothing left to unlock
+  4    42   32   90   D    Corner Barbers           max upside, gated: too small to buy
+  5    26   44    0   D    Nimbus AI Labs           venture-shaped, no succession event
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Rows 3 and 4 are the ones that matter. Lakeside Dental has near-perfect Fit but zero Upside, so
+it drops a band. Corner Barbers has maximum Upside but is gated to D.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+---
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## How scoring works
 
-## Learn More
+Both axes are pure functions over a lead and its enrichment signals. Every score carries a
+per-signal breakdown, so the UI renders "Why this score" from data that already exists —
+there is no separate explanation path that can drift from the number.
 
-To learn more about Next.js, take a look at the following resources:
+### Acquisition Fit (100 pts)
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+| Signal | Weight | Reasoning |
+|---|---|---|
+| Revenue band | 30 | $1M–$5M is the core ETA sweet spot |
+| Operating scale | 20 | 10–50 staff: runs without the owner in every seat |
+| Succession likelihood | 20 | Business age is the cheapest proxy for a retiring founder |
+| Owner-operated | 15 | A named owner means a decision-maker, not a board |
+| Industry fit | 15 | Fragmented owner-operated services beat venture-shaped firms |
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### AI-Readiness Upside (100 pts) — inverted
 
-## Deploy on Vercel
+| Signal | Weight | Points earned when… |
+|---|---|---|
+| Online booking | 18 | absent — bookings are phone-bound |
+| Mobile-ready | 15 | no responsive viewport |
+| Site maintenance | 13 | copyright 3+ years stale |
+| HTTPS | 12 | absent |
+| Online transactions | 12 | absent *in a category that sells online* |
+| Content platform | 12 | no CMS — changes need a developer |
+| Measurement | 10 | no analytics — spend is unmeasured |
+| Inbound capture | 8 | no chat — after-hours enquiries are lost |
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+**Weights normalise over available data.** A lead missing revenue is not punished for the gap;
+it is scored on its remaining signals and reports lower `confidence`. Signals that do not apply
+to an industry are excluded from the denominator entirely — a machine shop is never marked down
+for having no online checkout.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+`Priority = 0.6 × Fit + 0.4 × Upside`, clamped when `Fit < 35`.
+
+All weights live in [`src/lib/scoring/config.ts`](src/lib/scoring/config.ts) and are tunable
+without touching logic.
+
+---
+
+## Architecture
+
+| Layer | Technology | Why |
+|---|---|---|
+| Framework | **Next.js 15** (App Router), TypeScript | One deployable; server and client in one repo |
+| UI | Tailwind CSS 4, TanStack Table | |
+| API | Route Handlers + Server Actions | No separate service to host |
+| **Database** | **Neon — serverless Postgres**, Drizzle ORM | Scales to zero; HTTP driver works in serverless |
+| **Caching** | **Upstash Redis**, 7-day TTL keyed by normalised domain | See below |
+| Enrichment | `fetch` + Cheerio | See below |
+| **Hosting** | **Vercel — serverless functions**, not static | Enrichment needs a server runtime |
+| **Deployment** | Push to `main` → Vercel builds and deploys | Preview deploy per PR |
+| **Cloud** | Vercel (compute), Neon (data), Upstash (cache) | |
+
+### Caching and performance
+
+- **Enrichment cache** keyed by normalised domain, 7-day TTL. Measured on a live run:
+  **3,210 ms cold → 0 ms warm** for the same batch.
+- **Concurrency-capped** batch enrichment (`p-limit`, default 5) bounds simultaneous outbound
+  connections regardless of batch size, keeping a serverless invocation inside its socket budget.
+- **Cache degrades gracefully.** With no Upstash credentials the cache falls back to an
+  in-process Map, so the repo clones and runs with no environment at all. A Redis outage is
+  caught and never fails an enrichment run.
+- **Byte-capped responses** (1.5 MB) and an 8 s timeout stop one slow host stalling a batch.
+
+### Why Cheerio and not a headless browser
+
+One `GET` per company, parsed with Cheerio, enriches hundreds of leads in seconds inside a
+serverless function. Playwright would raise recall slightly and cost a browser cold-start per
+lead — the wrong trade for a triage tool where the output is a *ranking*, not a diligence report.
+
+Detection is deliberately conservative about phrases: `"Book now"` in a paragraph is marketing
+copy and is ignored; `"Book now"` on a link or button is a booking flow and counts.
+
+---
+
+## Ethical collection
+
+- **robots.txt is checked before every fetch** (RFC 9309: longest-match wins, `Allow` breaks
+  ties). A group naming our bot takes precedence over the wildcard.
+- **Declared identity.** Requests are sent as
+  `SaaSquatchSignalBot/1.0 (+https://github.com/authenticwaleed/SaaSquatch; lead qualification research)`.
+- **Public pages only.** One `GET` of a homepage a business already serves publicly. No login
+  walls, no personal data beyond the business contact details SaaSquatch already supplies.
+- **`Crawl-delay` is honoured**, capped at 10 s so one hostile file cannot stall a batch.
+- **Blocked means blocked.** A robots-disallowed lead returns `signals: null` and is scored on
+  Fit alone with `upside.confidence = 0` — it is never guessed at, and never penalised for
+  blocking us. (A site that blocks crawlers is often a *more* sophisticated operation, not less.)
+
+### Known characteristics
+
+- Absence of a fingerprint is reported as absence of a feature. A site may use a vendor we do not
+  recognise. This biases Upside slightly high rather than hiding a real gap — acceptable for a
+  prioritisation hint, not acceptable for diligence, and labelled as such in the UI.
+- An unreachable domain scores 70 Upside at `confidence 0.5`. That is intentional (a dead site is
+  a strong neglect signal) but it is the most likely source of a false positive, so the UI must
+  surface the confidence rather than the score alone.
+
+---
+
+## Setup
+
+```bash
+git clone git@github.com:authenticwaleed/SaaSquatch.git
+cd SaaSquatch
+npm install
+cp .env.example .env        # optional — the app runs without it
+npm run dev
+```
+
+Everything works with no environment configured: the cache falls back to memory. Add
+`DATABASE_URL` for persistence and the Upstash pair for a shared cache.
+
+```bash
+npm test          # 34 unit tests, no network required
+npm run test:watch
+npx tsc --noEmit  # typecheck
+```
+
+## Project layout
+
+```
+src/lib/
+  types.ts              Lead, DigitalSignals, ScoreBreakdown
+  domain.ts             Domain + company-name normalisation (shared by cache and dedupe)
+  scoring/
+    config.ts           All weights and thresholds — tune here
+    industries.ts       ETA industry fragmentation tiers
+    breakdown.ts        Normalises over available weight; tracks confidence
+    fit.ts              Acquisition Fit
+    upside.ts           AI-Readiness Upside (inverted)
+    index.ts            Blend, Fit gate, banding, headline
+  enrichment/
+    patterns.ts         Vendor fingerprints
+    http.ts             Timeout, byte cap, backoff, declared UA
+    robots.ts           RFC 9309 parser and policy check
+    signals.ts          Cheerio extraction
+    cache.ts            Upstash Redis with in-memory fallback
+    index.ts            Orchestration, concurrency cap
+tests/                  34 tests covering scoring and enrichment invariants
+```
+
+## Status
+
+- [x] Scoring engine, explainable, unit-tested
+- [x] Enrichment scraper: robots, caching, concurrency, graceful failure
+- [ ] Drizzle schema and persistence
+- [ ] Dedupe and email validation
+- [ ] Dashboard, filtering, CRM-shaped export

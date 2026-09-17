@@ -35,9 +35,23 @@ export function scoreUpside(
 ): ScoreBreakdown {
   const b = createBreakdown();
 
+  // Never enriched, or enrichment was declined (robots.txt). We genuinely do not
+  // know anything about this company's digital maturity, and must not confuse
+  // that with having looked and found nothing — a site that blocks crawlers is
+  // often a *more* sophisticated operation, not a less one.
+  if (!signals) {
+    b.unknown({
+      key: "digitalMaturity",
+      label: "Digital maturity",
+      weight: 100,
+      detail: "Not enriched — no signals collected",
+    });
+    return b.build();
+  }
+
   // No web presence at all. For a business with real revenue this is the
   // strongest single upside signal available, so it short-circuits the rubric.
-  if (!signals || !signals.hasWebsite) {
+  if (!signals.hasWebsite) {
     b.add({
       key: "noWebPresence",
       label: "No web presence",
