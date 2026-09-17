@@ -1,19 +1,26 @@
 # Netlify build configuration.
 #
-# Do NOT set `publish` here. Setting it to ".next" makes Netlify treat the build
-# output as a plain static directory: the Next.js Runtime never attaches, no
-# functions are deployed, every route 404s, and the internal build manifests get
-# served publicly. The Runtime sets the publish directory itself.
+# publish MUST be ".next" and the Next.js Runtime MUST be attached. Get either
+# one wrong and it fails in a confusing way:
 #
-# The Runtime is declared explicitly rather than relying on auto-detection,
-# which did not attach on the first deploy.
+#   * publish=".next" without the Runtime -> Netlify serves .next as a plain
+#     static directory. Every route 404s (there is no index.html at its root)
+#     and the internal build manifests are exposed publicly.
+#   * Runtime attached but publish = the repo root -> the plugin aborts with
+#     "Your publish directory cannot be the same as the base directory".
+#
+# Note that a publish directory set in the Netlify UI OVERRIDES this file
+# (the build log reports `publishOrigin: ui`). If this config appears to be
+# ignored, clear or correct the UI setting first.
 
 [build]
   command = "npm run build"
+  publish = ".next"
 
 [build.environment]
   NEXT_TELEMETRY_DISABLED = "1"
 
+# Declared explicitly: auto-detection did not attach the Runtime on the first deploy.
 [[plugins]]
   package = "@netlify/plugin-nextjs"
 
