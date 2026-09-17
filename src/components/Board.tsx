@@ -5,6 +5,7 @@ import type { LeadRow, PipelineSummary } from "@/lib/pipeline";
 import { toCsv } from "@/lib/csv";
 import { ScoreDrawer } from "./ScoreDrawer";
 import { ImportPanel } from "./ImportPanel";
+import { ENRICH_BATCH_LIMIT } from "@/lib/limits";
 
 type SortKey = "priority" | "fit" | "upside" | "company";
 type BandFilter = "all" | "A" | "B" | "C" | "D";
@@ -80,7 +81,7 @@ export function Board({
       const res = await fetch("/api/enrich", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ leads: rows.slice(0, 60).map((r) => r.lead) }),
+        body: JSON.stringify({ leads: rows.slice(0, ENRICH_BATCH_LIMIT).map((r) => r.lead) }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -146,7 +147,7 @@ export function Board({
               className="rounded-md border px-3 py-2 text-[12.5px] transition hover:bg-[var(--surface-2)] disabled:opacity-50"
               title="Scan each company's website for digital-maturity signals"
             >
-              {enriching ? "Scanning sites…" : `Enrich ${Math.min(unenriched, 60)} sites`}
+              {enriching ? "Scanning sites…" : `Enrich ${Math.min(unenriched, ENRICH_BATCH_LIMIT)} sites`}
             </button>
           )}
           <button

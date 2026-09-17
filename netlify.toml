@@ -1,0 +1,20 @@
+# Netlify build configuration.
+#
+# The Next.js Runtime is applied automatically for Next projects, so it is not
+# declared here — pinning it as a plugin conflicts with the version Netlify
+# installs. Node is pinned to match the local toolchain.
+
+[build]
+  command = "npm run build"
+  publish = ".next"
+
+[build.environment]
+  NODE_VERSION = "22"
+  # Keep the build honest: fail on a real error rather than shipping a broken page.
+  NEXT_TELEMETRY_DISABLED = "1"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"

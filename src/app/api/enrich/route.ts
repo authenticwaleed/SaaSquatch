@@ -4,12 +4,14 @@ import { enrichBatch } from "@/lib/enrichment";
 import { runPipeline } from "@/lib/pipeline";
 import { saveRun } from "@/db/repository";
 import type { DigitalSignals, Lead } from "@/lib/types";
+import { ENRICH_BATCH_LIMIT } from "@/lib/limits";
 
 export const runtime = "nodejs";
+// Honoured by Vercel; other hosts apply their own ceiling. The real protection
+// is ENRICH_BATCH_LIMIT, which bounds the work regardless of platform.
 export const maxDuration = 60;
 
-/** Bounded so one import cannot hold a serverless invocation open indefinitely. */
-const MAX_LEADS = 60;
+const MAX_LEADS = ENRICH_BATCH_LIMIT;
 
 const LeadSchema = z.object({
   id: z.string(),

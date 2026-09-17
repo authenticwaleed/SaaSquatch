@@ -311,22 +311,45 @@ npx tsc --noEmit  # typecheck
 
 ## Deployment
 
-Deployed on Vercel serverless. Both API routes declare `runtime = "nodejs"` —
-enrichment uses `cheerio` and MX validation uses `node:dns`, neither of which
-runs on the edge runtime.
+Runs on any host that gives it a **Node runtime** — `cheerio` and `node:dns` mean it cannot run
+on an edge/Workers runtime, and the board is server-rendered.
+
+### Netlify
 
 ```bash
-npm i -g vercel
-vercel login
-vercel link          # connect this directory to a Vercel project
-vercel --prod        # first deploy
+npm i -g netlify-cli
+netlify login
+netlify init      # link this repo to a site
+netlify deploy --build --prod
 ```
 
-Or connect the GitHub repo in the Vercel dashboard; pushes to `main` then deploy
-automatically and every PR gets a preview URL.
+Or connect the GitHub repo in the Netlify dashboard — `netlify.toml` already sets the build
+command and Node version, and the Next.js Runtime is applied automatically. Pushes to `main`
+deploy, and every PR gets a preview.
 
-**No environment variables are required.** The app runs on seed data with an
-in-memory cache. Add these to upgrade it:
+### Vercel
+
+```bash
+npm i -g vercel && vercel login && vercel --prod
+```
+
+Both API routes declare `runtime = "nodejs"`. `/api/enrich` also sets `maxDuration = 60`, which
+Vercel honours and other hosts ignore.
+
+### Function timeouts and the batch limit
+
+Enrichment is the only endpoint that does real work, and hosts cap synchronous functions
+differently — Netlify's free tier cuts off around 10s. So the batch size, not the timeout, is the
+real protection: [`ENRICH_BATCH_LIMIT`](src/lib/limits.ts) bounds a run to **15 companies**,
+shared by the API and the UI so the button never offers more work than the endpoint accepts.
+
+Fifteen sites fetch comfortably inside 10s at five-way concurrency with an 8s per-request
+ceiling, and a slow host degrades to a partial result rather than a hard failure. On a platform
+with a longer ceiling this can be raised — it is a property of the host, not the enrichment code.
+
+### Environment
+
+**No environment variables are required.** The app runs on seed data with an in-memory cache.
 
 | Variable | Effect if absent |
 |---|---|
@@ -334,13 +357,10 @@ in-memory cache. Add these to upgrade it:
 | `DATABASE_URL` (Neon) | No run history; enrichment cache loses its durable tier |
 | `OPENAI_API_KEY` | Outreach-angle generation is unavailable |
 
-`/api/enrich` sets `maxDuration = 60` and caps a batch at 60 leads, which keeps it
-inside the Vercel function limit on the Hobby plan.
-
 ### Verified from a clean clone
 
-`npm ci` → 57 tests → `npm run build` → `npm run start`, in an empty directory
-with no `.env`. If any of that breaks for you, it is a bug, not a setup step.
+`npm ci` → 57 tests → `npm run build` → `npm run start`, in an empty directory with no `.env`.
+If any of that breaks for you, it is a bug, not a setup step.
 
 ## Project layout
 
