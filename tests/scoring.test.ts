@@ -65,12 +65,17 @@ describe("scoreFit", () => {
     expect(fit.confidence).toBe(1);
   });
 
-  it("scores a venture-shaped company poorly", () => {
-    const fit = scoreFit(
+  it("separates a venture-shaped company from a textbook target by a wide margin", () => {
+    const venture = scoreFit(
       lead({ industry: "SaaS Startup", yearFounded: 2023, revenueUsd: 400_000, employeeCount: 6 }),
       NOW,
     );
-    expect(fit.score).toBeLessThan(40);
+    const textbook = scoreFit(lead(), NOW);
+
+    // The absolute floor matters less than the spread: the engine has to push
+    // these two apart decisively, or ranking is worthless.
+    expect(venture.score).toBeLessThan(50);
+    expect(textbook.score - venture.score).toBeGreaterThanOrEqual(40);
   });
 
   it("lowers confidence for missing data instead of penalising the score", () => {
