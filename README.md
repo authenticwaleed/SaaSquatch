@@ -90,6 +90,10 @@ for having no online checkout.
 
 `Priority = 0.6 × Fit + 0.4 × Upside`, clamped when `Fit < 35`.
 
+**Un-enriched leads rank on Fit alone.** Upside with zero confidence means we never
+measured it, not that there is none. Blending in an unobserved zero would rank a
+freshly imported lead below a scanned one purely for not having been looked at yet.
+
 All weights live in [`src/lib/scoring/config.ts`](src/lib/scoring/config.ts) and are tunable
 without touching logic.
 
@@ -224,6 +228,9 @@ the user configuring anything first.
 - **Why this score** — click any row for the full per-signal breakdown of both axes,
   the merge provenance, and the email verdict with its reasoning
 - **Filters** — search, band, industry, sort, and "contactable only"
+- **Import** — drop in a SaaSquatch CSV or any export with a company column; headers are
+  matched loosely (`Company`, `Company Name`, `Business` all work) and `"2,600,000"` parses
+- **Enrich** — scan the imported companies' sites on demand and re-score
 - **Export** — CRM-shaped CSV of the *current filtered view*, not the whole list
 
 Confidence is surfaced next to the score, never hidden: a `*` marks a row whose
@@ -248,7 +255,7 @@ Everything works with no environment configured: the cache falls back to memory.
 `DATABASE_URL` for persistence and the Upstash pair for a shared cache.
 
 ```bash
-npm test          # 55 unit tests, no network required
+npm test          # 57 unit tests, no network required
 npm run test:watch
 npx tsc --noEmit  # typecheck
 ```
@@ -281,9 +288,11 @@ src/lib/
     signals.ts          Cheerio extraction
     cache.ts            Upstash Redis with in-memory fallback
     index.ts            Orchestration, concurrency cap
-components/             Board (table, filters) and ScoreDrawer
+app/api/import          Parse an upload, dedupe and score it
+app/api/enrich          Scan sites for a batch and re-score
+components/             Board, ScoreDrawer, ImportPanel
 data/seed.ts            Demo dataset: duplicates, bad emails, a dead domain
-tests/                  55 tests covering scoring, enrichment and data-quality invariants
+tests/                  57 tests covering scoring, enrichment and data-quality invariants
 ```
 
 ## Status
@@ -293,5 +302,5 @@ tests/                  55 tests covering scoring, enrichment and data-quality i
 - [x] Deduplication with auditable merge reasons
 - [x] Email validation: syntax, role, disposable, MX
 - [x] Dashboard: ranked board, filters, score drawer, CRM export
-- [x] CSV import with tolerant header mapping
+- [x] CSV import with tolerant header mapping, and on-demand enrichment
 - [ ] Drizzle schema and persistence (runs on seed data today)
