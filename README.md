@@ -4,6 +4,11 @@
 
 An acquisition-readiness scoring layer built on top of [SaaSquatch Leads](https://www.saasquatchleads.com/).
 
+![The ranked board](docs/screenshots/01-board-light.png)
+
+*24 source rows resolved into 21 companies, ranked by priority. The `×3` badge marks a record
+merged from three duplicate rows.*
+
 ---
 
 ## The problem
@@ -55,6 +60,11 @@ it drops a band. Corner Barbers has maximum Upside but is gated to D.
 ---
 
 ## How scoring works
+
+![Why this score](docs/screenshots/02-score-drawer.png)
+
+*Click any row: every point is attributed to a signal, with the weight it carried and the
+reasoning behind it.*
 
 Both axes are pure functions over a lead and its enrichment signals. Every score carries a
 per-signal breakdown, so the UI renders "Why this score" from data that already exists —
@@ -195,6 +205,10 @@ Merged [1, 2, 3] -> "Brennan Heating & Air"
 Row 1 had the revenue, row 2 had the owner, row 3 had the headcount. No single
 row had all three.
 
+![Merge provenance](docs/screenshots/03-merge-provenance.png)
+
+*Every merge is auditable — which rows were folded together, and which rule matched each.*
+
 ### Email validation
 
 Syntax, disposable-provider and role-account detection, plus an MX lookup to
@@ -232,6 +246,15 @@ the user configuring anything first.
   matched loosely (`Company`, `Company Name`, `Business` all work) and `"2,600,000"` parses
 - **Enrich** — scan the imported companies' sites on demand and re-score
 - **Export** — CRM-shaped CSV of the *current filtered view*, not the whole list
+
+| | |
+|---|---|
+| ![Import](docs/screenshots/04-import-panel.png) | ![Band A filter](docs/screenshots/05-filtered-band-a.png) |
+| *Import a real export — headers are matched loosely.* | *Filtered to band A: the shortlist worth calling this week.* |
+
+The interface follows your system appearance:
+
+![Dark mode](docs/screenshots/06-board-dark.png)
 
 Confidence is surfaced next to the score, never hidden: a `*` marks a row whose
 Upside is based on partial data, and the drawer explains exactly why.
