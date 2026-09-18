@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { LeadRow, PipelineSummary } from "@/lib/pipeline";
 import { toCsv } from "@/lib/csv";
 import { ScoreDrawer } from "./ScoreDrawer";
@@ -9,6 +9,13 @@ import { ENRICH_BATCH_LIMIT } from "@/lib/limits";
 
 type SortKey = "priority" | "fit" | "upside" | "company";
 type BandFilter = "all" | "A" | "B" | "C" | "D";
+
+const PAGE_SIZES = [10, 25, 50, 100] as const;
+/**
+ * Ten matches the working set this tool is built around — a band-A shortlist you
+ * can actually call this week — rather than a page of rows nobody reads.
+ */
+const DEFAULT_PAGE_SIZE = 10;
 
 const money = (n: number | null) =>
   n == null ? "—" : n >= 1_000_000 ? `$${(n / 1_000_000).toFixed(1)}M` : `$${Math.round(n / 1000)}k`;
@@ -42,6 +49,8 @@ export function Board({
   const [contactable, setContactable] = useState(false);
   const [sort, setSort] = useState<SortKey>("priority");
   const [selected, setSelected] = useState<LeadRow | null>(null);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState<number>(DEFAULT_PAGE_SIZE);
 
   const industries = useMemo(
     () => [...new Set(rows.map((r) => r.lead.industry).filter(Boolean))].sort() as string[],
@@ -67,6 +76,22 @@ export function Board({
       return b.score.priority - a.score.priority || b.score.fit.score - a.score.fit.score;
     });
   }, [rows, query, band, industry, contactable, sort]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+
+  // Any change to the result set can strand the user on a page that no longer
+  // exists — filtering 200 rows down to 3 while on page 7 would show nothing.
+  useEffect(() => {
+    setPage(1);
+  }, [query, band, industry, contactable, sort, pageSize, rows]);
+
+  const pageRows = useMemo(
+    () => filtered.slice((page - 1) * pageSize, page * pageSize),
+    [filtered, page, pageSize],
+  );
+
+  const firstShown = filtered.length === 0 ? 0 : (page - 1) * pageSize + 1;
+  const lastShown = Math.min(page * pageSize, filtered.length);
 
   const unenriched = rows.filter((r) => r.signals == null).length;
 
@@ -229,13 +254,15 @@ export function Board({
               </tr>
             </thead>
             <tbody>
-              {filtered.map((row, i) => (
+              {pageRows.map((row, i) => (
                 <tr
                   key={row.lead.id}
                   onClick={() => setSelected(row)}
                   className="cursor-pointer border-b transition-colors last:border-0 hover:bg-[var(--surface-2)]"
                 >
-                  <td className="tnum px-3 py-2.5 text-[12px] text-[var(--text-faint)]">{i + 1}</td>
+                  <td className="tnum px-3 py-2.5 text-[12px] text-[var(--text-faint)]">
+                    {(page - 1) * pageSize + i + 1}
+                  </td>
                   <td className="px-3 py-2.5">
                     <div className="flex items-center gap-2">
                       <span className="truncate text-[13px] font-medium">{row.lead.companyName}</span>
@@ -296,6 +323,54 @@ export function Board({
           </table>
         </div>
 
+        {filtered.length > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t bg-[var(--surface-2)] px-3 py-2.5">
+            <p className="tnum text-[11.5px] text-[var(--text-muted)]">
+              Showing <span className="font-medium text-[var(--text)]">{firstShown}–{lastShown}</span>{" "}
+              of <span className="font-medium text-[var(--text)]">{filtered.length}</span>
+              {filtered.length !== rows.length && <span className="text-[var(--text-faint)]"> (filtered from {rows.length})</span>}
+            </p>
+
+            <div className="flex items-center gap-2">
+              <label className="flex items-center gap-1.5 text-[11.5px] text-[var(--text-muted)]">
+                Rows
+                <select
+                  value={pageSize}
+                  onChange={(e) => setPageSize(Number(e.target.value))}
+                  className="rounded-md border bg-[var(--surface)] px-1.5 py-1 text-[11.5px] outline-none focus:border-[var(--accent)]"
+                  aria-label="Rows per page"
+                >
+                  {PAGE_SIZES.map((n) => (
+                    <option key={n} value={n}>{n}</option>
+                  ))}
+                </select>
+              </label>
+
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                  aria-label="Previous page"
+                  className="rounded-md border px-2 py-1 text-[11.5px] transition hover:bg-[var(--surface)] disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  ‹ Prev
+                </button>
+                <span className="tnum px-1.5 text-[11.5px] text-[var(--text-muted)]">
+                  {page} / {totalPages}
+                </span>
+                <button
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={page >= totalPages}
+                  aria-label="Next page"
+                  className="rounded-md border px-2 py-1 text-[11.5px] transition hover:bg-[var(--surface)] disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Next ›
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {filtered.length === 0 && (
           <div className="px-4 py-14 text-center">
             <p className="text-[13px] font-medium">No leads match these filters</p>
@@ -315,7 +390,7 @@ export function Board({
       </div>
 
       <p className="mt-3 text-[11px] leading-snug text-[var(--text-muted)]">
-        Click any row for the full score breakdown. <span className="text-[var(--warn)]">*</span> marks
+        Export sends the whole filtered set, not just this page. Click any row for the full score breakdown. <span className="text-[var(--warn)]">*</span> marks
         reduced confidence — a site that could not be scanned, or signals that did not apply to the industry.
       </p>
 

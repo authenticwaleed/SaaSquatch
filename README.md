@@ -266,6 +266,9 @@ the user configuring anything first.
 - **Why this score** — click any row for the full per-signal breakdown of both axes,
   the merge provenance, and the email verdict with its reasoning
 - **Filters** — search, band, industry, sort, and "contactable only"
+- **Pagination** — 10 rows by default (10/25/50/100), with a running count. Rank numbers stay
+  global, so row 26 reads 26 rather than restarting per page, and changing a filter returns you
+  to page 1 instead of stranding you on a page that no longer exists
 - **Import** — two sample exports live in [`docs/sample-data/`](docs/sample-data/) with notes on
   what each demonstrates. Drop in a SaaSquatch CSV or any export with a company column; headers are
   matched loosely (`Company`, `Company Name`, `Business` all work) and `"2,600,000"` parses
