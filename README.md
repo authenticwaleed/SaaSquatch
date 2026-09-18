@@ -266,7 +266,8 @@ the user configuring anything first.
 - **Why this score** — click any row for the full per-signal breakdown of both axes,
   the merge provenance, and the email verdict with its reasoning
 - **Filters** — search, band, industry, sort, and "contactable only"
-- **Import** — drop in a SaaSquatch CSV or any export with a company column; headers are
+- **Import** — two sample exports live in [`docs/sample-data/`](docs/sample-data/) with notes on
+  what each demonstrates. Drop in a SaaSquatch CSV or any export with a company column; headers are
   matched loosely (`Company`, `Company Name`, `Business` all work) and `"2,600,000"` parses
 - **Enrich** — scan the imported companies' sites on demand and re-score
 - **Export** — CRM-shaped CSV of the *current filtered view*, not the whole list
